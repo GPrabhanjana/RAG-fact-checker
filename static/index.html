@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Article Checker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+:root {
+  --bg:       #0e0e0e;
+  --surface:  #141414;
+  --surface2: #1c1c1c;
+  --border:   #242424;
+  --border2:  #303030;
+  --text:     #e0e0e0;
+  --muted:    #565656;
+  --muted2:   #808080;
+  --green:    #4ade80;
+  --green-hl: rgba(74,222,128,.18);
+  --red:      #f87171;
+  --red-hl:   rgba(248,113,113,.18);
+  --dim-text: rgba(224,224,224,.28);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ══ HEADER ══ */
+#header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#header h1 {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin-right: 24px;
+  white-space: nowrap;
+}
+#header h1 span { color: var(--text); }
+
+.nav-tab {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  padding: 0 16px;
+  height: 44px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  transition: color .15s;
+  white-space: nowrap;
+}
+.nav-tab:hover  { color: var(--muted2); }
+.nav-tab.active { color: var(--text); border-bottom-color: var(--text); }
+
+#status-pill {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.dot.ok  { background: var(--green); }
+.dot.err { background: var(--red); }
+
+/* ══ CONTENT AREA ══ */
+#content { flex: 1; overflow: hidden; position: relative; }
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+.screen.active { display: flex; }
+
+/* ══ COLUMN PRIMITIVES ══ */
+.col { display: flex; flex-direction: column; overflow: hidden; }
+.col-left  { width: 42%; border-right: 1px solid var(--border); flex-shrink: 0; }
+.col-right { flex: 1; }
+
+.col-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  min-height: 38px;
+}
+.col-head-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.col-fixed {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+}
+
+/* THE KEY: flex:1 + min-height:0 = fills remaining space and scrolls */
+.col-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.col-scroll::-webkit-scrollbar { width: 3px; }
+.col-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ══ FORM CONTROLS ══ */
+input[type=text], textarea, select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+  width: 100%;
+}
+input[type=text]:focus, textarea:focus, select:focus { border-color: var(--border2); }
+textarea { resize: none; line-height: 1.6; }
+
+select {
+  cursor: pointer;
+  appearance: none;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23565656'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  padding-right: 26px;
+}
+
+.btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn:hover         { background: var(--surface2); border-color: var(--border2); }
+.btn.primary       { border-color: var(--text); }
+.btn.primary:hover { background: var(--text); color: var(--bg); }
+.btn.ghost         { color: var(--muted); border-color: transparent; font-size: 10px; padding: 4px 8px; }
+.btn.ghost:hover   { color: var(--red); border-color: var(--red); background: none; }
+.btn:disabled      { opacity: .3; cursor: not-allowed; }
+
+.upload-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color .12s, border-color .12s;
+  display: inline-block;
+}
+.upload-btn:hover { color: var(--text); border-color: var(--border2); }
+input[type=file]  { display: none; }
+
+.field-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.field-row:last-child { margin-bottom: 0; }
+.field-row.top { align-items: flex-start; }
+
+.lbl {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+.smsg {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 14px;
+}
+.smsg.err { color: var(--red); }
+
+.spinner {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border: 1px solid var(--muted);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin .55s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-hint {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 16px;
+}
+
+input[type=number].num-in {
+  width: 50px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  outline: none;
+}
+input[type=number].num-in:focus { border-color: var(--border2); }
+
+/* ══ LIBRARY ══ */
+.art-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .1s;
+}
+.art-item:hover    { background: var(--surface); }
+.art-item.selected { background: var(--surface2); }
+.art-item-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.art-item-meta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+#lib-viewer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+#lib-viewer-body::-webkit-scrollbar { width: 3px; }
+#lib-viewer-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+#lib-viewer-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+#lib-viewer-text {
+  font-size: 14px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  color: var(--muted2);
+}
+
+/* ══ CHECKER RESULTS ══ */
+.res-item {
+  padding: 10px 14px;
+  margin: 6px 10px;
+  border-left: 2px solid var(--border2);
+  cursor: pointer;
+  transition: background .1s;
+  animation: fadeUp .2s ease;
+}
+@keyframes fadeUp { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:none} }
+.res-item:hover        { background: var(--surface); }
+.res-item.res-selected { background: var(--surface2); }
+.res-item.r-supported    { border-left-color: var(--green); }
+.res-item.r-contradicted { border-left-color: var(--red); }
+.res-item.r-nomatch      { border-left-color: var(--muted); }
+.res-item.r-pending      { border-left-color: var(--border2); opacity: .5; }
+
+.res-sentence {
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+.res-verdict {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 2px;
+}
+.r-supported    .res-verdict { color: var(--green); }
+.r-contradicted .res-verdict { color: var(--red); }
+.r-nomatch      .res-verdict,
+.r-pending      .res-verdict { color: var(--muted); }
+
+.res-source { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--muted); }
+.res-match  { font-size:11px; font-style:italic; color:var(--muted2); margin-top:4px; padding-left:8px; border-left:1px solid var(--border); }
+.res-reason { font-size:11px; color:var(--muted2); margin-top:3px; }
+.res-error  { font-size:11px; color:var(--red); margin-top:3px; }
+
+.summary-card {
+  margin: 8px 10px 14px;
+  border: 1px solid var(--border);
+  padding: 11px 14px;
+  animation: fadeUp .25s ease;
+}
+.summary-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.summary-nums { display:flex; gap:18px; font-family:'IBM Plex Mono',monospace; font-size:12px; }
+.c-g{color:var(--green)} .c-r{color:var(--red)} .c-m{color:var(--muted)}
+
+/* ══ CHECKER DOC VIEWER ══ */
+#doc-viewer {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+  font-size: 14px;
+  line-height: 2.0;
+}
+#doc-viewer::-webkit-scrollbar { width: 3px; }
+#doc-viewer::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.hl-span {
+  display: inline;
+  border-radius: 2px;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--dim-text);
+  transition: background .25s, color .2s;
+}
+.hl-span.processed         { color: var(--text); }
+.hl-span.hl-supported      { background: var(--green-hl); color: var(--text); }
+.hl-span.hl-contradicted   { background: var(--red-hl);   color: var(--text); }
+.hl-span.hl-focused        { outline: 1px solid var(--muted2); outline-offset: 1px; }
+
+/* ══ TOAST ══ */
+.toast {
+  position: fixed; bottom: 18px; right: 18px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 8px 14px;
+  opacity: 0; transition: opacity .22s;
+  pointer-events: none; z-index: 999;
+  max-width: 300px;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <h1>Article <span>Checker</span></h1>
+  <button class="nav-tab active" data-screen="checker">Fact-check</button>
+  <button class="nav-tab" data-screen="library">
+    Library&nbsp;<span id="lib-badge" style="color:var(--muted)">(0)</span>
+  </button>
+  <div id="status-pill">
+    <span class="dot" id="s-dot"></span>
+    <span id="s-label">connecting…</span>
+  </div>
+</div>
+
+<div id="content">
+
+  <!-- ════════════════════ CHECKER ════════════════════ -->
+  <div class="screen active" id="screen-checker">
+
+    <!-- LEFT: controls (fixed) + results stream (scrollable) -->
+    <div class="col col-left">
+
+      <div class="col-fixed">
+        <!-- row 1: upload + clear -->
+        <div class="field-row">
+          <label class="upload-btn" for="chk-file-in">Upload file</label>
+          <input type="file" id="chk-file-in" accept=".txt,.pdf,.docx">
+          <span id="chk-fname" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;flex:1"></span>
+          <button class="btn ghost" id="chk-clear-btn">Clear</button>
+        </div>
+        <!-- row 2: textarea -->
+        <div class="field-row" style="margin-bottom:8px">
+          <textarea id="chk-textarea" style="min-height:80px;max-height:130px;resize:vertical"
+            placeholder="Paste text or upload a file to fact-check…"></textarea>
+        </div>
+        <!-- row 3: run + model + topk -->
+        <div class="field-row" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <button class="btn primary" id="chk-run-btn">Check</button>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+            <span class="lbl">Model</span>
+            <select id="chk-model" style="width:118px">
+              <option value="qwen3:8b">qwen3:8b</option>
+              <option value="qwen3:4b">qwen3:4b</option>
+            </select>
+            <span class="lbl">Top-K</span>
+            <input type="number" class="num-in" id="chk-topk" value="8" min="3" max="30">
+          </div>
+        </div>
+        <div id="chk-status" class="smsg" style="margin-top:8px"></div>
+      </div>
+
+      <!-- scrollable results stream -->
+      <div class="col-scroll" id="chk-stream">
+        <div class="empty-hint">Results will stream in here as each sentence is checked.</div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: highlighted document -->
+    <div class="col col-right">
+      <div class="col-head">
+        <span class="col-head-title">Document</span>
+        <span id="chk-doc-hint" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-left:auto">Waiting for input</span>
+      </div>
+      <!-- doc viewer is itself the scrollable area -->
+      <div id="doc-viewer">
+        <span class="empty-hint">Document will appear here with sentences highlighted as they are checked.</span>
+      </div>
+    </div>
+
+  </div><!-- /screen-checker -->
+
+
+  <!-- ════════════════════ LIBRARY ════════════════════ -->
+  <div class="screen" id="screen-library">
+
+    <!-- LEFT: add form (fixed) + article list (scrollable) -->
+    <div class="col col-left">
+
+      <div class="col-fixed">
+        <div class="field-row">
+          <span class="lbl">Name</span>
+          <input type="text" id="lib-name-in" placeholder="Article title">
+        </div>
+        <div class="field-row top">
+          <span class="lbl" style="padding-top:6px">Text</span>
+          <textarea id="lib-text-in" style="min-height:72px;max-height:130px;resize:vertical"
+            placeholder="Paste article text…"></textarea>
+        </div>
+        <div class="field-row" style="justify-content:flex-end;gap:8px">
+          <label class="upload-btn" for="lib-file-in">Upload .txt / .pdf / .docx</label>
+          <input type="file" id="lib-file-in" accept=".txt,.pdf,.docx" multiple>
+          <button class="btn primary" id="lib-save-btn">Save</button>
+        </div>
+        <div id="lib-form-status" class="smsg" style="margin-top:8px"></div>
+      </div>
+
+      <!-- scrollable article list -->
+      <div class="col-scroll" id="lib-list">
+        <div class="empty-hint">No articles yet.</div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: article viewer -->
+    <div class="col col-right">
+      <div class="col-head">
+        <span class="col-head-title" id="lib-viewer-label">Select an article to view</span>
+        <button class="btn ghost" id="lib-del-btn" style="margin-left:auto;display:none">Remove</button>
+      </div>
+      <div id="lib-viewer-body">
+        <span class="empty-hint">Click any article in the list to view its contents.</span>
+      </div>
+    </div>
+
+  </div><!-- /screen-library -->
+
+</div><!-- /content -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const API = '';
+
+/* ── utils ── */
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toast(msg,dur=2800){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),dur);
+}
+function splitSentences(text){
+  return text.replace(/\s+/g,' ').trim()
+    .split(/(?<=[.!?])\s+/)
+    .map(s=>s.trim()).filter(s=>s.length>15);
+}
+
+/* ── tab switching ── */
+document.querySelectorAll('.nav-tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('screen-'+btn.dataset.screen).classList.add('active');
+  });
+});
+
+/* ── status pill ── */
+async function refreshStatus(){
+  try{
+    const d=await fetch(API+'/status').then(r=>r.json());
+    document.getElementById('s-dot').className='dot '+(d.ollama?'ok':'err');
+    document.getElementById('s-label').textContent=d.ollama?d.sentences_stored+' sentences':'Ollama offline';
+  }catch{
+    document.getElementById('s-dot').className='dot err';
+    document.getElementById('s-label').textContent='server offline';
+  }
+}
+refreshStatus(); setInterval(refreshStatus,12000);
+
+/* ══════════════════════════════════════════════════
+   LIBRARY MODULE — touches only #screen-library DOM
+══════════════════════════════════════════════════ */
+const LIB = (()=>{
+  let selectedName = null;
+
+  function setFormStatus(html,isErr=false){
+    const el=document.getElementById('lib-form-status');
+    el.innerHTML=html; el.className='smsg'+(isErr?' err':'');
+  }
+  function resetViewer(){
+    selectedName=null;
+    document.getElementById('lib-viewer-label').textContent='Select an article to view';
+    document.getElementById('lib-del-btn').style.display='none';
+    document.getElementById('lib-viewer-body').innerHTML=
+      '<span class="empty-hint">Click any article in the list to view its contents.</span>';
+  }
+
+  async function load(){
+    try{
+      const arts=await fetch(API+'/articles').then(r=>r.json());
+      document.getElementById('lib-badge').textContent=`(${arts.length})`;
+      const list=document.getElementById('lib-list');
+      if(!arts.length){ list.innerHTML='<div class="empty-hint">No articles yet.</div>'; return; }
+      list.innerHTML=arts.map(a=>
+        `<div class="art-item${a.name===selectedName?' selected':''}" data-name="${esc(a.name)}">
+           <span class="art-item-name">${esc(a.name)}</span>
+           <span class="art-item-meta">${a.sentences} sent.</span>
+         </div>`
+      ).join('');
+      list.querySelectorAll('.art-item').forEach(el=>{
+        el.addEventListener('click',()=>viewArticle(el.dataset.name));
+      });
+    }catch(e){ console.error('lib load',e); }
+  }
+
+  async function viewArticle(name){
+    selectedName=name;
+    document.querySelectorAll('#lib-list .art-item').forEach(el=>
+      el.classList.toggle('selected', el.dataset.name===name));
+    document.getElementById('lib-viewer-label').textContent=name;
+    document.getElementById('lib-del-btn').style.display='block';
+    const body=document.getElementById('lib-viewer-body');
+    body.innerHTML='<span class="empty-hint"><span class="spinner"></span> Loading…</span>';
+    try{
+      const d=await fetch(API+'/articles/'+encodeURIComponent(name)+'/text').then(r=>r.json());
+      body.innerHTML=
+        `<div id="lib-viewer-title">${esc(d.name)}</div>`+
+        `<div id="lib-viewer-text">${esc(d.text)}</div>`;
+    }catch(e){
+      body.innerHTML=`<span class="empty-hint" style="color:var(--red)">Load error: ${esc(e.message)}</span>`;
+    }
+  }
+
+  /* delete */
+  document.getElementById('lib-del-btn').addEventListener('click',async()=>{
+    if(!selectedName) return;
+    const name=selectedName;
+    const r=await fetch(API+'/articles/'+encodeURIComponent(name),{method:'DELETE'});
+    if(r.ok){ toast(`Removed "${name}"`); resetViewer(); load(); refreshStatus(); }
+    else{ const d=await r.json(); toast('Error: '+d.detail,4000); }
+  });
+
+  /* save pasted */
+  document.getElementById('lib-save-btn').addEventListener('click',async()=>{
+    const name=document.getElementById('lib-name-in').value.trim();
+    const text=document.getElementById('lib-text-in').value.trim();
+    if(!name||!text){ toast('Name and text required'); return; }
+    const btn=document.getElementById('lib-save-btn');
+    btn.disabled=true; setFormStatus('<span class="spinner"></span> Embedding…');
+    const fd=new FormData(); fd.append('name',name); fd.append('text',text);
+    try{
+      const r=await fetch(API+'/articles',{method:'POST',body:fd});
+      const d=await r.json();
+      if(r.ok){
+        toast(`Saved "${name}" — ${d.added} sentences`);
+        document.getElementById('lib-name-in').value='';
+        document.getElementById('lib-text-in').value='';
+        setFormStatus(''); load(); refreshStatus();
+      } else setFormStatus('Error: '+d.detail,true);
+    }catch(e){ setFormStatus('Server error: '+e.message,true); }
+    btn.disabled=false;
+  });
+
+  /* upload files */
+  document.getElementById('lib-file-in').addEventListener('change',async(e)=>{
+    for(const file of Array.from(e.target.files)){
+      setFormStatus(`<span class="spinner"></span> Uploading ${esc(file.name)}…`);
+      const fd=new FormData(); fd.append('file',file);
+      try{
+        const r=await fetch(API+'/articles/upload',{method:'POST',body:fd});
+        const d=await r.json();
+        if(r.ok) toast(`Saved "${d.article}" — ${d.added} sentences`);
+        else toast('Error: '+d.detail,4000);
+      }catch(err){ toast('Upload failed: '+err.message,4000); }
+    }
+    setFormStatus(''); load(); refreshStatus(); e.target.value='';
+  });
+
+  return { load };
+})();
+
+
+/* ══════════════════════════════════════════════════
+   CHECKER MODULE — touches only #screen-checker DOM
+══════════════════════════════════════════════════ */
+const CHK = (()=>{
+  let sentences = [];
+  let abortCtrl = null;
+
+  function setStatus(html,isErr=false){
+    const el=document.getElementById('chk-status');
+    el.innerHTML=html; el.className='smsg'+(isErr?' err':'');
+  }
+  function setDocHint(t){ document.getElementById('chk-doc-hint').textContent=t; }
+
+  /* build dim spans in doc viewer */
+  function buildDocView(){
+    const v=document.getElementById('doc-viewer');
+    if(!sentences.length){ v.innerHTML='<span class="empty-hint">No text loaded.</span>'; return; }
+    v.innerHTML=sentences.map((s,i)=>
+      `<span class="hl-span" id="hs-${i}" data-idx="${i}">${esc(s)} </span>`
+    ).join('');
+    v.querySelectorAll('.hl-span').forEach(el=>{
+      el.addEventListener('click',()=>focusResult(+el.dataset.idx));
+    });
+  }
+
+  function applyHighlight(idx,verdict){
+    const s=document.getElementById('hs-'+idx); if(!s) return;
+    s.classList.add('processed');
+    s.classList.remove('hl-supported','hl-contradicted');
+    if(verdict==='SUPPORTS')    s.classList.add('hl-supported');
+    if(verdict==='CONTRADICTS') s.classList.add('hl-contradicted');
+  }
+
+  /* render / update a result card */
+  function renderCard(idx, data){
+    const stream=document.getElementById('chk-stream');
+    let card=document.getElementById('rc-'+idx);
+    if(!card){
+      card=document.createElement('div');
+      card.id='rc-'+idx;
+      stream.appendChild(card);
+    }
+    const v=data.verdict||'';
+    let cls='r-pending', label='…';
+    if(data.pending)              { cls='r-pending';      label='Checking…'; }
+    else if(data.error)           { cls='r-nomatch';      label='Error'; }
+    else if(v==='SUPPORTS')       { cls='r-supported';    label='✓ Supported'; }
+    else if(v==='CONTRADICTS')    { cls='r-contradicted'; label='✗ Contradicted'; }
+    else if(v==='NO_MATCH')       { cls='r-nomatch';      label='— No match'; }
+
+    const srcH  = data.source ? `<div class="res-source">↳ ${esc(data.source)}</div>` : '';
+    const matchH= data.match  ? `<div class="res-match">${esc(data.match)}</div>` : '';
+    const reaH  = data.reason ? `<div class="res-reason">${esc(data.reason)}</div>` : '';
+    const errH  = data.error  ? `<div class="res-error">${esc(data.error)}</div>` : '';
+
+    card.className=`res-item ${cls}`;
+    card.innerHTML=
+      `<div class="res-sentence">${esc(data.sentence||sentences[idx]||'')}</div>`+
+      `<div class="res-verdict">${label}</div>`+
+      srcH+matchH+reaH+errH;
+    card.onclick=()=>focusDoc(idx);
+  }
+
+  /* left → right */
+  function focusDoc(idx){
+    document.querySelectorAll('.res-item').forEach(el=>el.classList.remove('res-selected'));
+    const card=document.getElementById('rc-'+idx);
+    if(card) card.classList.add('res-selected');
+    const span=document.getElementById('hs-'+idx);
+    if(span){
+      span.scrollIntoView({behavior:'smooth',block:'center'});
+      document.querySelectorAll('.hl-span').forEach(s=>s.classList.remove('hl-focused'));
+      span.classList.add('hl-focused');
+    }
+  }
+
+  /* right → left */
+  function focusResult(idx){
+    document.querySelectorAll('.hl-span').forEach(s=>s.classList.remove('hl-focused'));
+    const span=document.getElementById('hs-'+idx);
+    if(span) span.classList.add('hl-focused');
+    const card=document.getElementById('rc-'+idx);
+    if(card){
+      document.querySelectorAll('.res-item').forEach(el=>el.classList.remove('res-selected'));
+      card.classList.add('res-selected');
+      card.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  }
+
+  /* file upload → populate textarea */
+  document.getElementById('chk-file-in').addEventListener('change',async(e)=>{
+    const file=e.target.files[0]; if(!file) return;
+    document.getElementById('chk-fname').textContent=file.name;
+    setStatus('<span class="spinner"></span> Extracting…');
+    const fd=new FormData(); fd.append('file',file);
+    try{
+      const r=await fetch(API+'/extract-text',{method:'POST',body:fd});
+      const d=await r.json();
+      if(r.ok){ document.getElementById('chk-textarea').value=d.text; setStatus(''); }
+      else setStatus('Extraction failed: '+d.detail,true);
+    }catch(e){ setStatus('Error: '+e.message,true); }
+    e.target.value='';
+  });
+
+  /* clear */
+  document.getElementById('chk-clear-btn').addEventListener('click',()=>{
+    if(abortCtrl) abortCtrl.abort();
+    sentences=[];
+    document.getElementById('chk-textarea').value='';
+    document.getElementById('chk-fname').textContent='';
+    document.getElementById('chk-stream').innerHTML=
+      '<div class="empty-hint">Results will stream in here as each sentence is checked.</div>';
+    document.getElementById('doc-viewer').innerHTML=
+      '<span class="empty-hint">Document will appear here with sentences highlighted as they are checked.</span>';
+    setStatus(''); setDocHint('Waiting for input');
+    document.getElementById('chk-run-btn').disabled=false;
+  });
+
+  /* run check */
+  document.getElementById('chk-run-btn').addEventListener('click',async()=>{
+    const text=document.getElementById('chk-textarea').value.trim();
+    if(!text){ toast('Enter or upload text to check'); return; }
+    const topk=parseInt(document.getElementById('chk-topk').value)||8;
+    const model=document.getElementById('chk-model').value;
+
+    if(abortCtrl) abortCtrl.abort();
+    abortCtrl=new AbortController();
+    sentences=splitSentences(text);
+    if(!sentences.length){ toast('No checkable sentences found'); return; }
+
+    buildDocView();
+    setDocHint(`0 / ${sentences.length} checked`);
+    document.getElementById('chk-stream').innerHTML='';
+    const btn=document.getElementById('chk-run-btn');
+    btn.disabled=true;
+
+    let done=0,sup=0,con=0,nom=0;
+
+    try{
+      const resp=await fetch(API+'/check/stream',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({text,top_k:topk,reason_model:model}),
+        signal:abortCtrl.signal
+      });
+      if(!resp.ok){ const d=await resp.json(); setStatus('Error: '+d.detail,true); btn.disabled=false; return; }
+
+      const reader=resp.body.getReader();
+      const dec=new TextDecoder();
+      let buf='';
+
+      while(true){
+        const{value,done:rd}=await reader.read();
+        if(rd) break;
+        buf+=dec.decode(value,{stream:true});
+        const lines=buf.split('\n'); buf=lines.pop();
+
+        for(const line of lines){
+          if(!line.startsWith('data: ')) continue;
+          let msg; try{msg=JSON.parse(line.slice(6));}catch{continue;}
+
+          if(msg.type==='progress'){
+            /* show pending card + scroll it into view */
+            renderCard(msg.index,{sentence:msg.sentence,pending:true});
+            const card=document.getElementById('rc-'+msg.index);
+            if(card) card.scrollIntoView({behavior:'smooth',block:'nearest'});
+            setStatus(`<span class="spinner"></span> Sentence ${msg.index+1} of ${msg.total}`);
+
+          } else if(msg.type==='result'){
+            renderCard(msg.index, msg);
+            applyHighlight(msg.index, msg.verdict||'NO_MATCH');
+            done++;
+            if(msg.verdict==='SUPPORTS')    sup++;
+            else if(msg.verdict==='CONTRADICTS') con++;
+            else nom++;
+            setDocHint(`${done} / ${sentences.length} checked`);
+
+          } else if(msg.type==='done'){
+            const stream=document.getElementById('chk-stream');
+            const sum=document.createElement('div');
+            sum.className='summary-card';
+            sum.innerHTML=
+              `<div class="summary-label">Summary — ${sentences.length} sentence${sentences.length!==1?'s':''}</div>`+
+              `<div class="summary-nums"><span class="c-g">✓ ${sup} supported</span><span class="c-r">✗ ${con} contradicted</span><span class="c-m">— ${nom} no match</span></div>`;
+            stream.appendChild(sum);
+            setStatus('Done.'); setDocHint('Complete');
+            btn.disabled=false;
+          }
+        }
+      }
+    }catch(e){
+      if(e.name!=='AbortError') setStatus('Error: '+e.message,true);
+      btn.disabled=false;
+    }
+  });
+})();
+
+/* init */
+LIB.load();
+</script>
+</body>
+</html>
